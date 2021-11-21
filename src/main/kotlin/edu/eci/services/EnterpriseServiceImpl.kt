@@ -1,5 +1,6 @@
 package edu.eci.services
 
+import edu.eci.entities.OrchestratorEvent
 import edu.eci.models.Enterprise
 import edu.eci.repositories.EnterpriseRepository
 import io.micronaut.http.HttpStatus
@@ -11,7 +12,7 @@ import java.time.LocalDateTime
 open class EnterpriseServiceImpl(
     private val enterpriseRepository: EnterpriseRepository,
     private val kafkaPublisherService: KafkaPublisherService
-): EnterpriseService {
+) : EnterpriseService {
 
     override fun createEnterprise(enterprise: Enterprise): Enterprise {
 
@@ -19,14 +20,20 @@ open class EnterpriseServiceImpl(
             throw HttpStatusException(HttpStatus.BAD_REQUEST, "enterprise.already.exists")
         }
 
-        if (enterprise.blackList || enterprise.reported){
+        if (enterprise.blackList || enterprise.reported) {
             throw HttpStatusException(HttpStatus.BAD_REQUEST, "enterprise.bad.state")
         }
 
         enterprise.createdAt = LocalDateTime.now()
 
         return this.enterpriseRepository.save(enterprise).let { enterpriseDB ->
-            this.kafkaPublisherService.sendOrchestratorData(enterpriseDB)
+            this.kafkaPublisherService.sendOrchestratorData(
+                OrchestratorEvent(
+                    event = "INTRODUCTION_ENTERPRISE_CREATED",
+                    data = enterpriseDB,
+                    id = enterpriseDB.id.toString()
+                )
+            )
             enterpriseDB
         }
     }
